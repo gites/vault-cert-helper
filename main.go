@@ -13,7 +13,7 @@ import (
 
 	vaultApi "github.com/hashicorp/vault/api"
 	flags "github.com/jessevdk/go-flags"
-	"github.com/minio/minio-go"
+	minio "github.com/minio/minio-go"
 	"github.com/spf13/viper"
 )
 
@@ -31,6 +31,13 @@ var (
 	//HumanVersion easy readable for Humans
 	HumanVersion = fmt.Sprintf("%s %s (%s)", Name, Version, GitCommit)
 )
+
+type pkiValue struct {
+	ttl     string
+	csr     string
+	cert    string
+	pkiPath string
+}
 
 func main() {
 
@@ -53,17 +60,16 @@ func main() {
 		log.Fatalln("Error reading config file: ", err)
 	}
 	// Get vaules from config file
-	csrURL := viper.GetString("csr")
-	certURL := viper.GetString("cert")
 	authMethod := viper.GetString("authMethod")
 	token := viper.GetString("token")
 	vaultURL := viper.GetString("vault")
-	ttl := viper.GetString("ttl")
-	pkiPath := viper.GetString("pkiPath")
+	ttlDefault := viper.GetString("ttl")
+	pkiPathDefault := viper.GetString("pkiPath")
 	s3SecretPath := viper.GetString("s3SecretPath")
 	insecure := viper.GetBool("insecure")
 	caCert := viper.GetString("caCert")
 	caPath := viper.GetString("caPath")
+	pkiSpec := viper.GetStringMapString("pkiSpec")
 
 	// Create Vault config object and apply vault env variables
 	config := vaultApi.DefaultConfig()
@@ -147,49 +153,57 @@ func main() {
 		log.Fatalln("Mino client: ", err)
 	}
 
-	// Check if cert is still valid
-	certObject, err := url.Parse(certURL)
-	if err != nil {
-		log.Fatalln("Cert URL: ", err)
+	for pki := range pkiSpec {
+		spec := viper.GetStringMapString("pkiSpec." + pki)
+
+		if spec["ttl"] == "" {
+			spec["ttl"] = ttlDefault
+		}
+		if spec["pkiPath"] == "" {
+			spec["pkiPath"] = pkiPathDefault
+		}
+		// Check if cert is still valid
+		certObject, err := url.Parse(spec["cert"])
+		if err != nil {
+			log.Fatalln("Bad Cert URL: ", err)
+		}
+
+		generate := checkCert(certObject, minioClient)
+		if !generate {
+			continue
+		}
+		// Sned CSR to Vault
+		csrObject, err := url.Parse(spec["csr"])
+		if err != nil {
+			log.Fatalln("Bad CSR URL: ", err)
+		}
+		csr := string(getCsr(csrObject, minioClient))
+
+		csrReq := map[string]interface{}{
+			"csr": csr,
+			"ttl": spec["ttl"],
+		}
+		cert, err := vault.Logical().Write(spec["pkiPath"], csrReq)
+		if err != nil {
+			log.Fatalln("Failed to sing certificate: ", err)
+			return
+		}
+		// Upload signed cert to bucket
+		cert2 := fmt.Sprint(cert.Data["certificate"])
+		_, err = minioClient.PutObject(certObject.Host, certObject.Path[1:], strings.NewReader(cert2), -1, minio.PutObjectOptions{ContentType: "application/x-x509-ca-cert"})
+		if err != nil {
+			log.Fatalln(err)
+			return
+		}
 	}
 
-	generate := checkCert(certObject, minioClient)
-	if !generate {
-		return
-	}
-
-	// Sned CSR to Vault
-	csrObject, err := url.Parse(csrURL)
-	if err != nil {
-		log.Fatalln("CSR URL: ", err)
-	}
-	csr := string(getCsr(csrObject, minioClient))
-
-	csrReq := map[string]interface{}{
-		"csr": csr,
-		"ttl": ttl,
-	}
-
-	cert, err := vault.Logical().Write(pkiPath, csrReq)
-	if err != nil {
-		log.Fatalln("Failed to sing certificate: ", err)
-		return
-	}
-	// Upload signed cert to bucket
-	cert2 := fmt.Sprint(cert.Data["certificate"])
-	_, err = minioClient.PutObject(certObject.Host, certObject.Path[1:], strings.NewReader(cert2), -1, minio.PutObjectOptions{ContentType: "application/x-x509-ca-cert"})
-	if err != nil {
-		log.Fatalln(err)
-		return
-	}
 }
-
 func checkCert(certObject *url.URL, minioClient *minio.Client) bool {
 	// Verifies if cert is still valid. If cert is after half of valid time it is marked as invalid.
 	certBuf, _ := getFromS3(certObject, minioClient)
 
 	if len(certBuf) == 0 {
-		log.Println("Missing cert, generating new one.")
+		log.Println("Missing cert", certObject, "generating new one.")
 		return true
 	}
 
@@ -208,7 +222,6 @@ func checkCert(certObject *url.URL, minioClient *minio.Client) bool {
 	printLogs("Cert CN: " + parsedCert.DNSNames[0] + " " + certObject.Host + certObject.Path + " still valid.")
 	return false
 }
-
 func getCsr(csrObject *url.URL, minioClient *minio.Client) []byte {
 	// Gets csr fromls s3 bucket
 	csrBuf, err := getFromS3(csrObject, minioClient)
@@ -245,6 +258,7 @@ func getFromS3(obj *url.URL, client *minio.Client) ([]byte, error) {
 func putToS3(obj *url.URL, client *minio.Client, data []byte) {
 
 }
+
 func printLogs(msg string) {
 	// Prints messages in -v flag is passed to cmd
 	if len(opts.Verbose) > 0 {
