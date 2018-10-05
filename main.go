@@ -32,13 +32,6 @@ var (
 	HumanVersion = fmt.Sprintf("%s %s (%s)", Name, Version, GitCommit)
 )
 
-type pkiValue struct {
-	ttl     string
-	csr     string
-	cert    string
-	pkiPath string
-}
-
 func main() {
 
 	flags.Parse(&opts)
