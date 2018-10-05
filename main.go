@@ -211,7 +211,7 @@ func checkCert(certObject *url.URL, minioClient *minio.Client) bool {
 	p, _ := pem.Decode(certBuf)
 	parsedCert, err := x509.ParseCertificate(p.Bytes)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln(certObject, err)
 	}
 	validFor := parsedCert.NotAfter.Sub(parsedCert.NotBefore)
 	since := time.Since(parsedCert.NotBefore)
@@ -254,9 +254,6 @@ func getFromS3(obj *url.URL, client *minio.Client) ([]byte, error) {
 		}
 	}
 	return data, err
-}
-func putToS3(obj *url.URL, client *minio.Client, data []byte) {
-
 }
 
 func printLogs(msg string) {
