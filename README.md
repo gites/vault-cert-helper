@@ -1,7 +1,11 @@
 # vault-cert-helper
 
-Vault-cert-helper is a simple tool intended to help you provision certificates from on-premises Vault to services running in AWS and GCE (or any other S3 compatible cloud). The service running in the cloud need to be able to fetch the certificate from S3. 
+Vault-cert-helper is a simple tool intended to help you provision certificates from on-premises Vault to services running in AWS and GCE (or any other S3 compatible cloud). 
+
+The service running in the cloud need to be able to fetch the certificate from S3. 
+
 Vault-cert-helper will watch if the certificate is older than a half of it's validity time and if so it will request a new one from Vault based on provided CSR and store it S3.
+
 This tool is intended to be deployed as K8s CronJob but can be used as a standalone thing.
 
 
