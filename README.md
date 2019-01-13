@@ -50,9 +50,9 @@ pkiSpec:                                                # pki spec
     csr: "s3://some/long/name/zoidberg.woop.sh.csr"
     cert: "s3://some/long/name/zoidberg.woop.sh.pem"
   zoidberg2:
-    csr: "s3://some/long/name/zoidberg.woop.sh.csr"
-    cert: "s3://some/long/name/zoidberg.woop.sh.pem"
-    pkiPath: "pki/sign/woop.sh"
+    csr: "s3://some/long/name/zoidberg2.woop.sh.csr"
+    cert: "s3://some/long/name/zoidberg2.woop.sh.pem"
+    pkiPath: "pki/sign/woop.sh"                         # path to custom pki role
 ```
 
 
@@ -64,7 +64,7 @@ s3SecretPath: "kv/secret/path"                          # secrets for accessing 
 authMethod: "token"                                     # sa - for K8s ServiceAccount, token - for token based  
 token: "8cc8ddf5-063c-6a85-9971-7a50e9b72811"           # vault token, can by also in env VAULT_TOKEN
 vault: "https://192.168.99.1:8200"                      # vault server uri
-pkiPath: "pki/sign/woop.sh"                             # pki path
+pkiPath: "pki/sign/woop.sh"                             # path to default pki role
 ttl: "1m"                                               # default ttl for reqested certs 
 caCert: "/etc/ssl/certs/planet_express_ca.pem"          # path to custom CA Cert file
 pkiSpec:                                                # pki spec
@@ -76,12 +76,46 @@ pkiSpec:                                                # pki spec
     csr: "s3://some/long/name/zoidberg.woop.sh.csr"
     cert: "s3://some/long/name/zoidberg.woop.sh.pem"
   zoidberg2:
-    csr: "s3://some/long/name/zoidberg.woop.sh.csr"
-    cert: "s3://some/long/name/zoidberg.woop.sh.pem"
-    pkiPath: "pki/sign/woop.sh"
+    csr: "s3://some/long/name/zoidberg2.woop.sh.csr"
+    cert: "s3://some/long/name/zoidberg2.woop.sh.pem"
+    pkiPath: "pki/sign/woop.sh"                         # path to custom pki role
 ```
 
 # enviroment variables 
 
 - all vault environment variables can be used https://www.vaultproject.io/docs/commands/index.html#environment-variables
 - each value in the config file can be overwritten by environment variable by using `VCH_` prefix and config field name. Variables name needs to be all uppercase.
+
+# example AWS S3 policy
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "VisualEditor0",
+            "Effect": "Allow",
+            "Action": "s3:GetObject",
+            "Resource": [
+                "arn:aws:s3:::some/long/name/woop.sh.csr",
+                "arn:aws:s3:::some/long/name/zoidberg.woop.sh.csr",
+                "arn:aws:s3:::some/long/name/zoidberg2.woop.sh.csr",
+                "arn:aws:s3:::some/long/name/"
+            ]
+        },
+        {
+            "Sid": "VisualEditor1",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject",
+                "s3:GetObject"
+            ],
+            "Resource": [
+                "arn:aws:s3:::some/long/name/woop.sh.pem",
+                "arn:aws:s3:::some/long/name/zoidberg.woop.sh.pem",
+                "arn:aws:s3:::some/long/name/zoidberg2.woop.sh.pem",                
+                "arn:aws:s3:::some/long/name/"
+            ]
+        }
+    ]
+}
+```
